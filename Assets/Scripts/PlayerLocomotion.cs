@@ -2,42 +2,32 @@ using EN;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace EN
 {
     public class PlayerLocomotion : MonoBehaviour
     {
-        PlayerManager playerManager;
+        PlayerManager playerManager;  // Reference to PlayerManager
         Transform cameraObject;
         InputHandler inputHandler;
         Vector3 moveDirection;
 
-        [HideInInspector]
-        public Transform myTransform;
-        [HideInInspector]
-        public AnimatorHandler animatorHandler;
+        [HideInInspector] public Transform myTransform;
+        [HideInInspector] public AnimatorHandler animatorHandler;
 
         public new Rigidbody rigidbody;
         public GameObject normalCamera;
 
         [Header("Stats")]
-        [SerializeField]
-        float movementSpeed = 7;
-        [SerializeField]
-        float sprintSpeed = 13;
-        [SerializeField]
-        float rotationSpeed = 10;
-        [SerializeField]
-        float rollDistance = 5f;
-        [SerializeField]
-        float rollDuration = 0.5f;
-        [SerializeField]
-        float rollCooldown = 1.0f;
-        [SerializeField]
-        float jumpForce = 0.8f;
-        [SerializeField]
-        float gravityMultiplier = 2f;
-
+        [SerializeField] float movementSpeed = 7;
+        [SerializeField] float sprintSpeed = 13;
+        [SerializeField] float rotationSpeed = 10;
+        [SerializeField] float rollDistance = 5f;
+        [SerializeField] float rollDuration = 0.5f;
+        [SerializeField] float rollCooldown = 1.0f;
+        [SerializeField] float jumpForce = 0.8f;
+        [SerializeField] float gravityMultiplier = 2f;
 
         [Header("Gravity")]
         [SerializeField] private float gravity = -9.81f;
@@ -52,26 +42,47 @@ namespace EN
         [Header("Jump")]
         [SerializeField] private float jumpHeight = 2f;
 
+        [Header("Stamina")]
+        [SerializeField] private float maxStamina = 100f;
+        private float currentStamina;
+        [SerializeField] private float staminaConsumptionRate = 10f;
+        [SerializeField] private float staminaRegenerationRate = 5f;
+        private bool isSprinting;
+        public Slider staminaSlider;
+
+        [Header("I-frames")]
+        private bool isInIFrames = false;
+        private float iFramesDuration = 0.5f; // Длительность i-frames
+        private float iFramesEndTime;
+
         private float fallStartHeight;
         private bool isFalling;
 
-        
+
         void Start()
         {
             playerManager = GetComponent<PlayerManager>();
             rigidbody = GetComponent<Rigidbody>();
             inputHandler = GetComponent<InputHandler>();
             animatorHandler = GetComponentInChildren<AnimatorHandler>();
-            playerManager = GetComponent<PlayerManager>();
             cameraObject = Camera.main.transform;
             myTransform = transform;
             animatorHandler.Initialize();
+            currentStamina = maxStamina;
         }
         public void Update()
         {
             float delta = Time.deltaTime;
             HandleFallDamage();
             animatorHandler.anim.SetBool("isFalling", !playerManager.isGrounded);
+            staminaSlider.value = currentStamina;
+
+            if (isInIFrames && Time.time >= iFramesEndTime)
+            {
+                isInIFrames = false;
+                Debug.Log("i-frames закончились");
+            }
+
         }
         public void FixedUpdate()
         {
@@ -84,7 +95,7 @@ namespace EN
 
         private void HandleRotation(float delta)
         {
-            if (!inputHandler.rollFlag)
+            if (!inputHandler.rollFlag && !playerManager.isInteracting)  // Check if not interacting
             {
                 Vector3 targetDir = Vector3.zero;
                 float moveOverride = inputHandler.moveAmount;
@@ -105,46 +116,60 @@ namespace EN
 
                 myTransform.rotation = targetRotation;
             }
-            
         }
         public void HandleMovement(float delta)
         {
-            
-
-            if (inputHandler.rollFlag)
+            if (inputHandler.rollFlag || playerManager.isInteracting)  // Prevent movement if interacting
                 return;
 
             inputHandler.TickInput(delta);
 
-            // Определяем направление движения
+            // Determine movement direction
             moveDirection = cameraObject.forward * inputHandler.vertical + cameraObject.right * inputHandler.horizontal;
             moveDirection.y = 0;
             moveDirection.Normalize();
 
-            // Выбираем скорость
+            // Choose movement speed
             float speed = inputHandler.sprintFlag && inputHandler.moveAmount > 0 ? sprintSpeed : movementSpeed;
             playerManager.isSprinting = inputHandler.sprintFlag && inputHandler.moveAmount > 0;
 
-            // Вычисляем целевую скорость
+            // Calculate target velocity
             Vector3 targetVelocity = moveDirection * speed;
 
-            // Если игрок не двигается, быстро тормозим
             if (inputHandler.moveAmount == 0)
             {
                 targetVelocity = Vector3.zero;
             }
 
-            // Проверяем, на земле ли игрок
+            // Check if on the ground
             if (playerManager.isGrounded)
             {
-                rigidbody.velocity = new Vector3(targetVelocity.x, -2f, targetVelocity.z); // Притягиваем к земле
+                rigidbody.velocity = new Vector3(targetVelocity.x, -2f, targetVelocity.z);
             }
             else
             {
-                rigidbody.velocity = new Vector3(targetVelocity.x, rigidbody.velocity.y, targetVelocity.z); // Сохраняем вертикальную скорость
+                rigidbody.velocity = new Vector3(targetVelocity.x, rigidbody.velocity.y, targetVelocity.z);
             }
 
-            // Обновление анимаций
+            // Handle stamina for sprinting
+            if (inputHandler.sprintFlag && inputHandler.moveAmount > 0 && currentStamina > 0)
+            {
+                isSprinting = true;
+                currentStamina -= staminaConsumptionRate * Time.deltaTime;
+            }
+            else if (currentStamina <= 0)
+            {
+                isSprinting = false;
+            }
+
+            if (!playerManager.isSprinting && inputHandler.moveAmount < 0.5f)
+            {
+                currentStamina += staminaRegenerationRate * Time.deltaTime;
+            }
+
+            currentStamina = Mathf.Clamp(currentStamina, 0, maxStamina);
+
+            // Update animations
             animatorHandler.UpdateAnimatorValues(inputHandler.moveAmount, 0, playerManager.isSprinting);
 
             if (animatorHandler.canRotate)
@@ -159,14 +184,15 @@ namespace EN
 
         public void HandleRollingAndSprinting(float delta)
         {
-            if (animatorHandler.anim.GetBool("isInteracting"))
+            if (animatorHandler.anim.GetBool("isInteracting") || playerManager.isInteracting)  // Prevent roll if interacting
                 return;
+
             if (inputHandler.rollFlag)
             {
                 moveDirection = cameraObject.forward * inputHandler.vertical;
                 moveDirection += cameraObject.right * inputHandler.horizontal;
 
-                if(inputHandler.moveAmount > 0)
+                if (inputHandler.moveAmount > 0)
                 {
                     animatorHandler.PlayTargetAnimation("RollForward", true);
                     moveDirection.y = 0;
@@ -174,7 +200,6 @@ namespace EN
                     Quaternion rollRotation = Quaternion.LookRotation(moveDirection);
                     myTransform.rotation = rollRotation;
                     StartCoroutine(Roll(moveDirection));
-
                 }
                 else
                 {
@@ -188,6 +213,10 @@ namespace EN
         {
             Rigidbody rb = GetComponent<Rigidbody>();
             float elapsedTime = 0.0f;
+
+            // Включаем i-frames на момент переката
+            isInIFrames = true;
+            iFramesEndTime = Time.time + iFramesDuration;
 
             while (elapsedTime < rollDuration)
             {
@@ -229,33 +258,43 @@ namespace EN
             return (fallHeight - fallDamageThreshold) * fallDamageMultiplier;
         }
 
+
         private void HandleFallDamage()
         {
+            // Проверка, что игрок находится на земле
             if (playerManager.isGrounded)
             {
+                // Если игрок падает
                 if (isFalling)
                 {
+                    // Вычисляем высоту падения
                     float fallHeight = fallStartHeight - transform.position.y;
 
+                    // Если высота падения превышает порог
                     if (fallHeight > fallDamageThreshold)
                     {
+                        // Вычисляем урон от падения
                         float damage = CalculateFallDamage(fallHeight);
-                        ApplyDamage(damage);
+                        playerManager.TakeDamage(damage);  // Наносим урон
                         Debug.Log($"Fall Damage: {damage}");
                     }
 
+                    // Завершаем падение
                     isFalling = false;
                 }
             }
             else
             {
+                // Если игрок начинает падать (не на земле)
                 if (!isFalling)
                 {
+                    // Запоминаем высоту начала падения
                     fallStartHeight = transform.position.y;
-                    isFalling = true;
+                    isFalling = true;  // Устанавливаем флаг падения в true
                 }
             }
         }
+
         private void ApplyDamage(float damage)
         {
             // Здесь можно добавить логику для уменьшения здоровья персонажа

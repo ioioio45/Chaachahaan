@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace EN
 {
@@ -19,6 +20,9 @@ namespace EN
 
         public float health = 100f;
 
+        [Header("UI Elements")]
+        public Slider healthSlider;
+
         public bool isGrounded; // Флаг, указывающий, что персонаж на земле
         [SerializeField] private float groundCheckDistance = 0.5f; // Расстояние для проверки земли
         [SerializeField] private LayerMask groundLayer;
@@ -31,6 +35,12 @@ namespace EN
             anim = GetComponentInChildren<Animator>();
             playerLocomotion = GetComponent<PlayerLocomotion>();
             cameraHandler = CameraHandler.singleton;
+
+            if (healthSlider != null)
+            {
+                healthSlider.maxValue = health;
+                healthSlider.value = health;
+            }
         }
 
         // Update is called once per frame
@@ -70,6 +80,7 @@ namespace EN
         {
             float delta = Time.deltaTime;
             inputHandler.TickInput(delta);
+            if(isGrounded)
             playerLocomotion.HandleMovement(delta);
             if (cameraHandler != null)
             {
@@ -90,13 +101,20 @@ namespace EN
             health -= damage;
             if (health <= 0)
             {
+                health = 0;
                 Die();
+            }
+
+            // Обновляем UI слайдер
+            if (healthSlider != null)
+            {
+                healthSlider.value = health;
             }
         }
         private void Die()
         {
             Debug.Log("Player Died!");
-            // Логика смерти персонажа
+            // Логика смерти, например, перезапуск игры или переход на экран смерти
         }
         private void CheckIfGrounded()
         {

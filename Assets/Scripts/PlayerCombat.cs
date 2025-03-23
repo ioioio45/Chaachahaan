@@ -8,6 +8,8 @@ public class PlayerCombat : MonoBehaviour
     public float attackRange = 1.5f; // Дальность атаки
     public float attackDamage = 25f; // Урон
     public LayerMask enemyLayer; // Слой врагов
+    private float attackCooldown = 0.5f;
+    private float lastAttackTime = 0f;
 
     private void Start()
     {
@@ -16,28 +18,28 @@ public class PlayerCombat : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetMouseButtonDown(0) && !isAttacking) // ЛКМ - слабая атака
+        if (Time.time - lastAttackTime >= attackCooldown)
         {
-            StartCoroutine(Attack(1));
-        }
-        else if (Input.GetMouseButtonDown(1) && !isAttacking) // ПКМ - сильная атака
-        {
-            StartCoroutine(Attack(2));
+            if (Input.GetMouseButtonDown(0) && !isAttacking)
+            {
+                StartCoroutine(Attack(1));
+            }
+            else if (Input.GetMouseButtonDown(1) && !isAttacking)
+            {
+                StartCoroutine(Attack(2));
+            }
         }
     }
 
     private IEnumerator Attack(int attackType)
     {
+        lastAttackTime = Time.time;
         isAttacking = true;
         anim.SetBool("isAttacking", true);
         anim.SetInteger("attackType", attackType);
-
         yield return new WaitForSeconds(0.3f); // Ждём немного перед нанесением урона
-
         DealDamage();
-
         yield return new WaitForSeconds(0.5f); // Время на завершение атаки
-
         anim.SetBool("isAttacking", false);
         isAttacking = false;
     }

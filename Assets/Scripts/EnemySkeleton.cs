@@ -16,6 +16,11 @@ public class EnemySkeleton : MonoBehaviour
     private bool isAttacking;
     private NavMeshAgent agent;
 
+    private float attackCooldown = 1f;
+    private float lastAttackTime = 0f;
+
+
+
     private void Start()
     {
         agent = GetComponent<NavMeshAgent>();
@@ -44,7 +49,7 @@ public class EnemySkeleton : MonoBehaviour
         }
         else
         {
-            anim.SetFloat("Speed", 0); // Остановить анимацию, если игрок далеко
+            anim.SetFloat("Vertical", 0); // Остановить анимацию, если игрок далеко
         }
     }
 
@@ -53,14 +58,17 @@ public class EnemySkeleton : MonoBehaviour
         if (isAttacking) return;
 
         agent.SetDestination(player.position);
-        anim.SetFloat("Speed", 0.5f);
+        anim.SetFloat("Vertical", 0.5f);
     }
 
     private IEnumerator Attack()
     {
+        if (Time.time - lastAttackTime < attackCooldown) yield break; // Если прошло недостаточно времени, атака не будет выполнена
+        lastAttackTime = Time.time;
+
         isAttacking = true;
-        anim.SetFloat("Speed", 0f);
-        anim.SetTrigger("RightAttack");  // Это должен быть параметр типа Trigger
+        anim.SetFloat("Vertical", 0f);
+        anim.SetTrigger("RightAttack");
 
         yield return new WaitForSeconds(0.5f);
 
